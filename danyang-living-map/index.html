@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>단양, 사람이 모여 사는 곳</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23194e43'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ffb34f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="map.css">
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="data/map-data.js"></script>
+  <script src="data/display-data.js"></script>
+</head>
+<body>
+  <header class="heading">
+    <div>
+      <div class="eyebrow">단양살이 실험실 · 옛 KBS 중계소 부지</div>
+      <h1>단양, 사람이 모여 사는 곳</h1>
+      <p>산과 물 사이에 형성된 거주 분포</p>
+    </div>
+    <div class="source-summary"><span id="population-total"></span><br><span class="subtle">2023년 인구 · 2024년 집계구 경계</span></div>
+  </header>
+  <main>
+    <div id="map" aria-label="단양군의 3D 지형과 추정 인구 분포 지도"></div>
+    <nav class="views" aria-label="지도 범위">
+      <button type="button" data-view="county">단양군 전체</button>
+      <button type="button" data-view="town" class="selected" aria-pressed="true">단양읍 · 부지</button>
+      <button type="button" data-view="site">부지 가까이</button>
+    </nav>
+    <section class="controls panel" aria-label="지도 표현">
+      <div class="panel-title">거주 분포 표현</div>
+      <div class="slider-label"><label for="sphere-size">구 크기</label><output id="sphere-size-value">3.0</output></div>
+      <input id="sphere-size" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="구 크기">
+      <label class="palette-label" for="color-palette">인구 색상</label>
+      <select id="color-palette">
+        <option value="purple">자주 · 보라</option>
+        <option value="blue">청록 · 남색</option>
+        <option value="orange">주황 · 적색</option>
+      </select>
+      <div class="slider-label"><label for="terrain-scale">지형 높이 배율</label><output id="terrain-scale-value">1.0배</output></div>
+      <input id="terrain-scale" type="range" min="1" max="2.5" step="0.1" value="1" aria-label="지형 높이 배율">
+      <div class="checks">
+        <label><input id="show-spheres" type="checkbox" checked> 인구 구</label>
+        <label><input id="show-site" type="checkbox" checked> 부지 경계</label>
+        <label><input id="show-units" type="checkbox"> 집계구 경계</label>
+      </div>
+      <button type="button" id="export-image" class="save-button">현재 화면 저장</button>
+    </section>
+    <section class="legend panel" aria-label="색상 범례">
+      <div class="panel-title">100m 구역별 추정 인구 <span class="unit">명</span></div>
+      <div class="legend-colors" id="legend-colors"></div>
+      <div class="legend-values" id="legend-values"></div>
+      <p>구 하나는 주거 건물이 있는 100m 구역을 나타냅니다.</p>
+      <div class="site-key"><span></span> 옛 KBS 중계소 부지</div>
+    </section>
+    <section class="selection panel" id="selection" hidden aria-live="polite">
+      <button type="button" id="close-selection" aria-label="선택 정보 닫기">×</button>
+      <div class="panel-title" id="selection-title"></div>
+      <div id="selection-content"></div>
+    </section>
+    <details class="method panel">
+      <summary>자료와 표현 방법</summary>
+      <div class="method-body">
+        <p id="method-text"></p>
+        <p>색은 100m 구역에 배분된 인구 추정치입니다. 구의 크기는 인구나 실제 거주 면적을 뜻하지 않습니다.</p>
+        <p>실제 건물별 거주인구·공실·관광객 분포는 반영하지 않았습니다. 용도가 미상인 건물과 비주거 건물은 인구 배분에서 제외했습니다.</p>
+        <p id="source-detail"></p>
+        <p>제공한 DEM을 화면용 지형으로 변환했습니다. 집계구를 합친 단양 경계 밖의 잔여 지형은 잘라내고, 경계의 빈 높이는 인접한 유효 높이로 보완했습니다. 지도 가장자리와 측면은 연회색입니다. 원본 DEM과 인구 추정값은 그대로 유지했습니다.</p>
+        <p>부지 경계: 제공 파일의 도전리 산5-6 · <span id="site-area"></span>㎡</p>
+        <p><a href="data/population-cells.csv" download>구역별 추정값 다운로드</a></p>
+        <p>배경지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></p>
+      </div>
+    </details>
+    <div id="status" class="status" role="status">지형과 거주 분포를 불러오는 중…</div>
+    <div class="gesture-hint">드래그로 이동 · 휠로 확대 · 오른쪽 드래그로 회전</div>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
