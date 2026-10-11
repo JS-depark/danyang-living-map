@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import {installReferenceLayers,unitColors,buildingColors} from './reference-layers.js';
 
 const {meta, points, site, county, units} = window.DANYANG_DATA;
 const palettes = {
@@ -19,10 +20,21 @@ const fmt = new Intl.NumberFormat('ko-KR');
 const formatEstimate = value => value < 10 ? value.toFixed(1) : fmt.format(Math.round(value));
 document.getElementById('population-total').textContent = `자료 내 총인구 ${fmt.format(meta.population_total)}명`;
 document.getElementById('method-text').textContent = meta.method;
-document.getElementById('source-detail').textContent = `2023년 총인구 ${fmt.format(meta.population_total)}명 / 2024.06.30 집계구 ${meta.population_units}개 / 주거용 건물 ${fmt.format(meta.residential_buildings)}개 / 표시 구 ${fmt.format(meta.spheres)}개. 집계구별 인구 합계를 유지했습니다.`;
+document.getElementById('source-detail').textContent = `2023년 총인구 ${fmt.format(meta.population_total)}명과 2024.06.30 기준 집계구 ${meta.population_units}개를 사용했습니다. 주거용 건물 ${fmt.format(meta.residential_buildings)}개를 바탕으로 만든 추정 인구를 ${fmt.format(meta.spheres)}개의 구로 표시했습니다. 건물 레이어에서는 단양 경계 안의 건물 ${fmt.format(meta.reference_buildings)}개를 볼 수 있습니다.`;
 document.getElementById('site-area').textContent = fmt.format(Math.round(meta.site.area_m2));
 document.getElementById('legend-colors').innerHTML = colors.map(color => `<span style="background:${color}"></span>`).join('');
 const labels = [`0–${thresholds[0]}`, ...thresholds.slice(0, -1).map((n, i) => `${n}–${thresholds[i + 1]}`), `${thresholds.at(-1)} 이상`];
+const unitThresholds = meta.unit_population_thresholds;
+const unitLabels = [`0–${unitThresholds[0]}`, ...unitThresholds.slice(0,-1).map((n,i)=>`${n}–${unitThresholds[i+1]}`), `${unitThresholds.at(-1)} 이상`];
+document.getElementById('unit-legend-colors').innerHTML=unitColors.map(color=>`<span style="background:${color}"></span>`).join('');
+document.getElementById('unit-legend-values').innerHTML=unitLabels.map(label=>`<span>${label}</span>`).join('');
+const controls=document.getElementById('map-controls');
+const compactControls=()=>{if(window.matchMedia('(max-width:600px), (max-height:700px)').matches) controls.open=false;};
+compactControls();
+window.addEventListener('resize',compactControls);
+let referenceLayers;
+let selectionKind;
+let countyFitToken=0;
 document.getElementById('legend-values').innerHTML = labels.map(label => `<span>${label}</span>`).join('');
 
 const terrainUrl = new URL('terrain-clean/{z}/{x}/{y}.png', location.href).href.replace(/%7B/g, '{').replace(/%7D/g, '}');
@@ -33,18 +45,18 @@ const map = new maplibregl.Map({
   pitch: 58,
   bearing: -12,
   maxPitch: 78,
-  minZoom: 9.2,
+  minZoom: 7,
   maxZoom: 18,
-  maxBounds: [[meta.bounds[0] - .04, meta.bounds[1] - .04], [meta.bounds[2] + .04, meta.bounds[3] + .04]],
+  maxBounds: [[meta.bounds[0] - 1, meta.bounds[1] - 1], [meta.bounds[2] + 1, meta.bounds[3] + 1]],
   canvasContextAttributes: {antialias: true, preserveDrawingBuffer: true},
   style: {
     version: 8,
     sources: {
       osm: {type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, bounds:meta.bounds,
         attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>'},
-      dem: {type: 'raster-dem', tiles: [terrainUrl], tileSize: 256, minzoom: 9, maxzoom: 14,
+      dem: {type: 'raster-dem', tiles: [terrainUrl], tileSize: 256, minzoom: 7, maxzoom: 14,
         bounds: meta.dem_bounds, encoding: 'mapbox', attribution: '지형·건물·집계구: 제공 자료'},
-      hills: {type: 'raster-dem', tiles: [terrainUrl], tileSize: 256, minzoom: 9, maxzoom: 14,
+      hills: {type: 'raster-dem', tiles: [terrainUrl], tileSize: 256, minzoom: 7, maxzoom: 14,
         bounds: meta.dem_bounds, encoding: 'mapbox'}
     },
     terrain: {source: 'dem', exaggeration: 1},
@@ -230,8 +242,8 @@ map.on('load', () => {
   map.addLayer({id:'terrain-rim',type:'fill',source:'rim',paint:{'fill-color':'#cad5c9','fill-antialias':false}});
   map.addLayer({id: 'county-outline', type: 'line', source: 'county', paint: {'line-color': '#a8b8a6', 'line-width': .7, 'line-opacity': .6}});
   map.addSource('units', {type: 'geojson', data: units});
-  map.addLayer({id: 'unit-outlines', type: 'line', source: 'units', layout: {visibility: 'none'},
-    paint: {'line-color': '#566e81', 'line-width': 1, 'line-opacity': .7}});
+  referenceLayers=installReferenceLayers(map,{units,meta,showSelection});
+  referenceLayers.setUnitsVisible(document.getElementById('show-units').checked);
   map.addSource('site', {type: 'geojson', data: site});
   map.addLayer({id: 'site-fill', type: 'fill', source: 'site', paint: {'fill-color': '#3479d0', 'fill-opacity': .24}});
   map.addLayer({id: 'site-outline', type: 'line', source: 'site', paint: {'line-color': '#2154bd', 'line-width': 3}});
@@ -392,26 +404,125 @@ document.getElementById('terrain-scale').addEventListener('input', e => {
 });
 document.getElementById('show-spheres').addEventListener('change', e => {
   visible = e.target.checked; map.triggerRepaint();
+  if(!visible && selectionKind==='sphere') clearSelection();
+  updateLegend();
 });
 document.getElementById('show-units').addEventListener('change', e => {
-  if (map.getLayer('unit-outlines')) map.setLayoutProperty('unit-outlines', 'visibility', e.target.checked ? 'visible' : 'none');
+  referenceLayers?.setUnitsVisible(e.target.checked);
+  if(!e.target.checked && selectionKind==='unit') clearSelection();
+  updateLegend();
+});
+document.getElementById('show-buildings').addEventListener('change', async e => {
+  const checkbox=e.target;
+  if(!referenceLayers) {checkbox.checked=false;return;}
+  const message=document.getElementById('buildings-status');
+  checkbox.disabled=true;
+  if(checkbox.checked && !referenceLayers.state().buildingsReady) {message.hidden=false;message.textContent='건물 자료를 불러오는 중…';}
+  try {
+    await referenceLayers.setBuildingsVisible(checkbox.checked);
+    message.hidden=true;
+  } catch(error) {
+    checkbox.checked=false;
+    await referenceLayers.setBuildingsVisible(false);
+    message.hidden=false;message.textContent='건물 자료를 불러오지 못했습니다. 잠시 후 다시 켜주세요.';
+  } finally {checkbox.disabled=false;updateLegend();}
+  if(!checkbox.checked && selectionKind==='building') clearSelection();
 });
 document.getElementById('show-site').addEventListener('change', e => {
   for (const id of ['site-fill', 'site-outline']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', e.target.checked ? 'visible' : 'none');
   if (siteCallout) siteCallout.hidden = !e.target.checked;
+  if(!e.target.checked && selectionKind==='site') clearSelection();
+  updateLegend();
+});
+
+function updateLegend() {
+  document.getElementById('sphere-legend').hidden=!visible;
+  document.getElementById('unit-legend').hidden=!document.getElementById('show-units').checked;
+  document.getElementById('building-legend').hidden=!document.getElementById('show-buildings').checked;
+  document.getElementById('site-legend').hidden=!document.getElementById('show-site').checked;
+  document.querySelector('.legend').hidden=!['show-spheres','show-buildings','show-units','show-site'].some(id=>document.getElementById(id).checked);
+  document.getElementById('sphere-size').disabled=!visible;
+  document.getElementById('color-palette').disabled=!visible;
+}
+
+function viewPadding() {
+  const canvas=map.getCanvas();
+  const width=canvas.clientWidth,height=canvas.clientHeight;
+  const box=map.getContainer().getBoundingClientRect();
+  const controlsBox=controls.getBoundingClientRect();
+  const legend=document.querySelector('.legend');
+  const legendBox=legend.getBoundingClientRect();
+  const short=height<400;
+  return {top:short?70:85,bottom:short?45:Math.min(190,legend.hidden?45:height-legendBox.top+box.top+18),
+    left:width<600?20:controlsBox.right-box.left+24,right:width<600?20:70};
+}
+
+function projectedTerrainBounds() {
+  const projection=sphereLayer.camera?.projectionMatrix;
+  if(!projection) return null;
+  const width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight;
+  const bounds={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity};
+  const add=(x,y,z)=>{
+    envelopeVector.set(x,y,z*exaggeration).applyMatrix4(projection);
+    const px=(envelopeVector.x+1)*width/2,py=(1-envelopeVector.y)*height/2;
+    if(!Number.isFinite(px+py)) return;
+    bounds.left=Math.min(bounds.left,px);bounds.right=Math.max(bounds.right,px);
+    bounds.top=Math.min(bounds.top,py);bounds.bottom=Math.max(bounds.bottom,py);
+  };
+  for(const sample of sphereLayer.wallSamples || []) add(...sample.xy,sample.z);
+  for(let i=0;i<envelopeIndices.length;i+=192) {
+    const vertex=envelopeIndices[i]*3;
+    add(envelopeVertices[vertex],envelopeVertices[vertex+1],envelopeVertices[vertex+2]);
+  }
+  return bounds;
+}
+
+async function fitCounty({pitch=48,bearing=-8,duration=1100}={}) {
+  const token=++countyFitToken;
+  const padding=viewPadding();
+  const camera=map.cameraForBounds([[meta.bounds[0],meta.bounds[1]],[meta.bounds[2],meta.bounds[3]]],{padding,bearing});
+  if(!camera) return;
+  const arrived=map.once('moveend');
+  map.easeTo({...camera,pitch,bearing,padding:0,duration});
+  await arrived;
+  for(let step=0;step<10 && token===countyFitToken && activeView==='county';step++) {
+    const rendered=map.once('render');map.triggerRepaint();await rendered;
+    const footprint=projectedTerrainBounds();
+    const width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight;
+    if(!footprint) break;
+    const availableWidth=width-padding.left-padding.right,availableHeight=height-padding.top-padding.bottom;
+    const ratio=Math.min(availableWidth/(footprint.right-footprint.left),availableHeight/(footprint.bottom-footprint.top));
+    const deltaZoom=Math.max(-.7,Math.min(.7,Math.log2(ratio*.9)));
+    const dx=(footprint.left+footprint.right)/2-(padding.left+availableWidth/2);
+    const dy=(footprint.top+footprint.bottom)/2-(padding.top+availableHeight/2);
+    if(Math.abs(deltaZoom)<.035 && Math.hypot(dx,dy)<3) break;
+    const center=map.unproject([width/2+dx,height/2+dy]);
+    const nextZoom=Math.max(map.getMinZoom(),Math.min(map.getMaxZoom(),map.getZoom()+deltaZoom));
+    const moved=map.once('moveend');map.easeTo({center,zoom:nextZoom,padding:0,duration:100});await moved;
+  }
+}
+map.on('movestart',e=>{if(e.originalEvent) countyFitToken++;});
+map.on('moveend',()=>{
+  const top=Math.abs(map.getPitch())<.01 && Math.abs(map.getBearing())<.01;
+  document.getElementById('top-view').classList.toggle('selected',top);
+  document.getElementById('top-view').setAttribute('aria-pressed',String(top));
+});
+document.getElementById('top-view').addEventListener('click',()=>{
+  manualCalloutPosition=undefined;envelopeDirty=true;
+  if(activeView==='county') fitCounty({pitch:0,bearing:0,duration:700});
+  else {countyFitToken++;map.easeTo({pitch:0,bearing:0,padding:0,duration:700});}
 });
 
 const viewButtons = document.querySelectorAll('[data-view]');
 viewButtons.forEach(button => button.addEventListener('click', () => {
-  activeView=button.dataset.view;manualCalloutPosition=undefined;envelopeDirty=true;
+  countyFitToken++;activeView=button.dataset.view;manualCalloutPosition=undefined;envelopeDirty=true;
   viewButtons.forEach(other => {
     other.classList.toggle('selected', other === button);
     other.setAttribute('aria-pressed', String(other === button));
   });
-  document.getElementById('selection').hidden = true;
-  const padding = window.innerWidth < 600 ? {top: 75, bottom: 200, left: 20, right: 20} : {top: 70, bottom: 150, left: 255, right: 50};
+  clearSelection();
   if (button.dataset.view === 'county') {
-    map.fitBounds([[meta.bounds[0], meta.bounds[1]], [meta.bounds[2], meta.bounds[3]]], {padding, pitch: 48, bearing: -8, duration: 1300});
+    fitCounty();
   } else if (button.dataset.view === 'town') {
     map.flyTo({center: [meta.site.longitude + .006, meta.site.latitude + .010], zoom: 12.8, pitch: 58, bearing: -12, duration: 1100, padding: 0});
   } else {
@@ -431,25 +542,41 @@ function selectSphere(e) {
   const hits = raycaster.intersectObject(mesh, false);
   if (!hits.length) return;
   const p = points[hits[0].instanceId];
-  showSelection('주거 건물이 있는 100m 구역', `<span class="selection-number">${formatEstimate(p[3])}</span> 명 <span class="subtle">추정 인구</span><br>주거용 건물 ${p[4]}개<br><span class="subtle">집계구 인구를 건물 규모에 따라 배분한 값입니다.</span>`);
+  showSelection('주거 건물이 있는 100m 구역', `<span class="selection-number">${formatEstimate(p[3])}</span> 명 <span class="subtle">추정 인구</span><br>주거용 건물 ${p[4]}개<br><span class="subtle">집계구 인구를 건물 규모에 따라 배분한 값입니다.</span>`,'sphere');
+  return true;
 }
 map.on('click', e => {
+  clearSelection();
+  if(referenceLayers?.selectAt(e.point,'building')) return;
   const hits = map.getLayer('site-fill') ? map.queryRenderedFeatures(e.point, {layers: ['site-fill']}) : [];
   if (hits.length) {
     showSiteSelection();
-  } else selectSphere(e);
+  } else if(!selectSphere(e)) referenceLayers?.selectAt(e.point,'unit');
 });
 function showSiteSelection() {
-  showSelection('옛 KBS 중계소 부지', `단양읍 도전리 산5-6<br>제공 경계 면적 ${fmt.format(Math.round(meta.site.area_m2))}㎡<br><span class="subtle">제공된 부지 파일 기준</span>`);
+  referenceLayers?.clearHighlight();
+  showSelection('옛 KBS 중계소 부지', `단양읍 도전리 산5-6<br>부지 경계 면적 ${fmt.format(Math.round(meta.site.area_m2))}㎡`,'site');
 }
-function showSelection(title, html) {
+function showSelection(title, html, kind) {
+  selectionKind=kind;
   document.getElementById('selection-title').textContent = title;
   document.getElementById('selection-content').innerHTML = html;
   document.getElementById('selection').hidden = false;
 }
-document.getElementById('close-selection').addEventListener('click', () => {
+function clearSelection() {
+  selectionKind=undefined;
+  referenceLayers?.clearHighlight();
   document.getElementById('selection').hidden = true;
-});
+}
+document.getElementById('close-selection').addEventListener('click',clearSelection);
+
+function exportLegends() {
+  const sections=[];
+  if(visible) sections.push({kind:'range',title:'100m 구역별 추정 인구 (명)',colors,labels,note:'구 하나 = 주거 건물이 있는 100m 구역 · 건물별 실제 인구가 아닌 추정치'});
+  if(document.getElementById('show-units').checked) sections.push({kind:'range',title:'집계구 총인구 (명) · 2023년',colors:unitColors,labels:unitLabels});
+  if(document.getElementById('show-buildings').checked) sections.push({kind:'keys',title:'건물',colors:buildingColors,labels:['주거용','기타·미상']});
+  return sections;
+}
 
 document.getElementById('export-image').addEventListener('click', async () => {
   if (map.isMoving()) await map.once('moveend');
@@ -460,13 +587,17 @@ document.getElementById('export-image').addEventListener('click', async () => {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1100, source.width);
   const viewHeight = Math.round(source.height * canvas.width / source.width);
-  canvas.height = viewHeight + 225;
+  const sections=exportLegends();
+  const showSite=document.getElementById('show-site').checked;
+  const footerHeight=sections.reduce((sum,section)=>sum+(section.kind==='range'?65:45)+(section.note?22:0),0)+(showSite?28:0)+45;
+  canvas.height = viewHeight + 85 + footerHeight;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#243630'; ctx.font = '600 25px "Malgun Gothic",sans-serif';
   ctx.fillText('단양, 사람이 모여 사는 곳', 30, 40);
   ctx.font = '14px "Malgun Gothic",sans-serif'; ctx.fillStyle = '#60746b';
-  ctx.fillText(`2023년 인구 · 건축물 기반 추정 분포 · 지형 높이 ${exaggeration.toFixed(1)}배`, 30, 66);
+  const layerNames=[visible?'100m 추정 인구':'',document.getElementById('show-buildings').checked?'건물':'',document.getElementById('show-units').checked?'집계구 총인구':''].filter(Boolean);
+  ctx.fillText(`${layerNames.join(' · ') || '단양 지형'} · 지형 높이 ${exaggeration.toFixed(1)}배`, 30, 66);
   ctx.drawImage(source, 0, 85, canvas.width, viewHeight);
   if (document.getElementById('show-site').checked && calloutLayout && siteCallout.style.display !== 'none') {
     const ratio = canvas.width / source.clientWidth;
@@ -484,22 +615,27 @@ document.getElementById('export-image').addEventListener('click', async () => {
     ctx.font = `600 ${c.font*ratio}px "Malgun Gothic",sans-serif`;
     ctx.fillStyle = '#fff';ctx.textBaseline='middle';ctx.fillText(label,x+c.paddingX*ratio,y+c.height*ratio/2);ctx.textBaseline='alphabetic';
   }
-  const bottom = viewHeight + 112;
-  ctx.fillStyle = '#243630'; ctx.font = '13px "Malgun Gothic",sans-serif';
-  ctx.fillText('100m 구역별 추정 인구 (명)', 30, bottom);
-  colors.forEach((color, i) => {
-    ctx.fillStyle = color; ctx.fillRect(30 + i * 110, bottom + 12, 100, 10);
-    ctx.fillStyle = '#42554b'; ctx.font = '12px "Malgun Gothic",sans-serif';
-    ctx.fillText(labels[i], 30 + i * 110, bottom + 42);
-  });
-  if (document.getElementById('show-site').checked) {
-    ctx.fillStyle = '#3479d0';ctx.fillRect(630, bottom + 12, 16, 10);
-    ctx.fillStyle = '#243630';ctx.font = '12px "Malgun Gothic",sans-serif';
-    ctx.fillText('옛 KBS 중계소 부지', 657, bottom + 23);
+  let row = viewHeight + 112;
+  for(const section of sections) {
+    ctx.fillStyle='#243630';ctx.font='13px "Malgun Gothic",sans-serif';
+    ctx.fillText(section.title,30,row);
+    section.colors.forEach((color,i)=>{
+      ctx.fillStyle=color;
+      const x=30+i*(section.kind==='range'?110:170);
+      ctx.fillRect(x,row+12,section.kind==='range'?100:16,10);
+      ctx.fillStyle='#42554b';ctx.font='12px "Malgun Gothic",sans-serif';
+      ctx.fillText(section.labels[i],section.kind==='range'?x:x+24,row+(section.kind==='range'?42:22));
+    });
+    row+=section.kind==='range'?65:45;
+    if(section.note) {ctx.fillStyle='#60746b';ctx.font='11px "Malgun Gothic",sans-serif';ctx.fillText(section.note,30,row);row+=22;}
   }
-  ctx.fillStyle = '#60746b'; ctx.font = '11px "Malgun Gothic",sans-serif';
-  ctx.fillText('구 하나 = 주거 건물이 있는 100m 구역 · 건물별 실제 인구가 아닌 추정치', 30, bottom + 67);
-  ctx.fillText('배경지도 © OpenStreetMap contributors · https://www.openstreetmap.org/copyright', 30, bottom + 85);
+  if(showSite) {
+    ctx.fillStyle='#3479d0';ctx.fillRect(30,row-10,16,10);
+    ctx.fillStyle='#243630';ctx.font='12px "Malgun Gothic",sans-serif';ctx.fillText('옛 KBS 중계소 부지',54,row);row+=28;
+  }
+  ctx.fillStyle='#60746b';ctx.font='11px "Malgun Gothic",sans-serif';
+  ctx.fillText('배경지도 © OpenStreetMap contributors · https://www.openstreetmap.org/copyright',30,row);
+  window.DANYANG_LAST_EXPORT_LEGENDS=sections.map(section=>section.title);
   // Keep the latest rendered export available for inspection without affecting
   // the map or the downloaded PNG.
   document.getElementById('saved-view-preview')?.remove();
@@ -516,4 +652,6 @@ document.getElementById('export-image').addEventListener('click', async () => {
 
 window.DANYANG_VIEW_STATE = () => ({sphereCount: points.length, radiusPixels, exaggeration, visible,
   estimatedTotal: points.reduce((sum, p) => sum + p[3], 0), rendered: !!mesh, terrain: !!map.getTerrain(),palette:document.getElementById('color-palette').value,
-  outsideMasked:!!map.getLayer('outside-mask'),solidWalls:!!sphereLayer.wall});
+  outsideMasked:!!map.getLayer('outside-mask'),solidWalls:!!sphereLayer.wall,
+  references:referenceLayers?.state(),minZoom:map.getMinZoom(),zoom:map.getZoom(),pitch:map.getPitch()});
+window.DANYANG_COUNTY_FOOTPRINT=projectedTerrainBounds;

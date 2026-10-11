@@ -1,5 +1,6 @@
 :root { color-scheme: light; --ink:#243630; --muted:#64736c; --accent:#194e43; }
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 body { margin:0; color:var(--ink); background:#f8faf8; font-family:"Segoe UI","Malgun Gothic",sans-serif; }
 button,input,summary { font:inherit; }
 button,summary { cursor:pointer; }
@@ -16,7 +17,15 @@ main { position:relative; height:calc(100dvh - 112px); min-height:480px; overflo
 .views { position:absolute; top:18px; left:50%; transform:translateX(-50%); display:flex; gap:3px; padding:4px; border:1px solid #e0e7df; border-radius:10px; background:#fff; box-shadow:0 3px 12px #2336270d; white-space:nowrap; }
 .views button { border:0; background:transparent; color:#4c6259; padding:10px 16px; border-radius:7px; font-size:12px; }
 .views .selected { background:var(--accent); color:#fff; }
-.controls { position:absolute; top:18px; left:18px; width:225px; padding:17px; }
+.controls { position:absolute; top:18px; left:18px; width:225px; padding:0; max-height:calc(100% - 80px); overflow:auto; }
+.controls summary { padding:14px 17px; font-size:12px; font-weight:650; }
+.controls-body { padding:0 17px 17px; }
+.layer-options { border:0; padding:0; margin:0; display:grid; grid-template-columns:1fr; gap:7px; font-size:11px; }
+.layer-options legend { color:#52675d; font-size:11px; padding:0 0 9px; }
+.layer-options label { display:flex; align-items:center; gap:7px; cursor:pointer; min-height:22px; }
+.layer-help { font-size:10px; color:#64736c; line-height:1.6; margin:8px 0 0; }
+.layer-status { font-size:10px; color:#245b7a; margin-top:7px; line-height:1.5; }
+input:disabled,select:disabled { opacity:.45; }
 .panel-title { font-size:12px; font-weight:650; margin-bottom:12px; }
 .slider-label { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:#52675d; margin-top:13px; }
 .slider-label output { font-variant-numeric:tabular-nums; }
@@ -26,7 +35,7 @@ input[type=range] { width:100%; margin:8px 0 1px; accent-color:var(--accent); }
 .checks { display:flex; flex-wrap:wrap; gap:8px 12px; margin:13px 0; font-size:11px; }
 .checks label { display:flex; align-items:center; gap:5px; min-height:22px; cursor:pointer; }
 input[type=checkbox] { accent-color:var(--accent); margin:0; }
-.save-button { padding:8px 12px; width:100%; color:#375548; background:#f2f6f2; border:1px solid #e0e8df; border-radius:6px; font-size:11px; }
+.save-button { padding:8px 12px; width:100%; color:#375548; background:#f2f6f2; border:1px solid #e0e8df; border-radius:6px; font-size:11px; margin-top:14px; }
 .legend { position:absolute; bottom:49px; left:18px; width:330px; padding:17px 18px; }
 .legend .panel-title { margin-bottom:9px; }
 .unit { color:var(--muted); font-weight:400; }
@@ -34,6 +43,18 @@ input[type=checkbox] { accent-color:var(--accent); margin:0; }
 .legend-colors span { flex:1; border-radius:2px; }
 .legend-values { display:flex; justify-content:space-between; margin-top:5px; font-size:10px; font-variant-numeric:tabular-nums; }
 .legend p { font-size:10px; margin:10px 0 0; color:#5f7166; }
+.legend-block + .legend-block { margin-top:12px; padding-top:10px; border-top:1px solid #e5ebe5; }
+.legend-block[hidden] + .legend-block { margin-top:0; padding-top:0; border-top:0; }
+.building-keys { display:flex; gap:22px; font-size:10px; }
+.building-keys span { display:flex; align-items:center; gap:6px; }
+.building-keys i { display:inline-block; width:16px; height:9px; }
+.residential-key { background:#ed963c; }
+.other-building-key { background:#647d95; }
+.attribute-list { margin:9px 0 0; font-size:11px; }
+.attribute-list div { display:grid; grid-template-columns:82px 1fr; gap:9px; padding:5px 0; border-bottom:1px solid #edf0ed; }
+.attribute-list dt { color:#64736c; }
+.attribute-list dd { margin:0; overflow-wrap:anywhere; }
+.selection-note { font-size:10px; color:#64736c; margin:9px 0 0; line-height:1.6; }
 .site-key { display:flex; align-items:center; gap:7px; font-size:10px; margin-top:10px; }
 .site-key span { width:15px; height:8px; border:2px solid #2152ba; background:#3a6fcd1f; }
 .method { position:absolute; bottom:49px; right:18px; width:265px; font-size:11px; max-height:60%; overflow:auto; }
@@ -41,7 +62,7 @@ input[type=checkbox] { accent-color:var(--accent); margin:0; }
 .method-body { padding:0 16px 12px; line-height:1.7; color:#52675c; }
 .method p { margin:0 0 9px; }
 .method a { color:#245b7a; }
-.selection { position:absolute; right:18px; top:66px; padding:18px; width:255px; font-size:12px; line-height:1.8; }
+.selection { position:absolute; right:18px; top:66px; padding:18px; width:285px; font-size:12px; line-height:1.8; max-height:calc(100% - 130px); overflow:auto; }
 .selection .panel-title { margin-bottom:6px; }
 .selection[hidden] { display:none; }
 #close-selection { position:absolute; right:8px; top:7px; font-size:21px; border:0; background:transparent; color:#758077; padding:0 5px; }
@@ -67,7 +88,7 @@ input[type=checkbox] { accent-color:var(--accent); margin:0; }
  h1 { font-size:21px; }
  main { height:calc(100dvh - 106px); }
  .views { left:18px; transform:none; }
- .controls { top:78px; width:205px; padding:14px; }
+ .controls { top:78px; width:205px; }
  .legend { width:310px; }
  .method { width:235px; }
  .selection { top:78px; width:235px; }
@@ -81,7 +102,9 @@ input[type=checkbox] { accent-color:var(--accent); margin:0; }
  main { height:calc(100dvh - 99px); min-height:490px; }
  .views { top:12px; left:12px; }
  .views button { padding:9px 10px; font-size:11px; }
- .controls { top:64px; left:12px; width:175px; padding:12px; }
+ .controls { top:64px; left:12px; width:175px; }
+ .controls summary { padding:12px; }
+ .controls-body { padding:0 12px 12px; }
  .controls .panel-title { margin-bottom:5px; }
  .site-label { font-size:18px; padding:10px 14px; }
  .slider-label { margin-top:8px; }
@@ -93,4 +116,10 @@ input[type=checkbox] { accent-color:var(--accent); margin:0; }
  .gesture-hint { left:12px; bottom:20px; font-size:9px; }
  .maplibregl-ctrl-bottom-left { display:none; }
  .status { top:64px; left:50%; width:220px; z-index:10; }
+}
+@media(max-height:650px) and (min-width:601px) {
+ main { min-height:250px; }
+ .controls { max-height:calc(100% - 80px); }
+ .legend { bottom:42px; padding:11px 14px; }
+ .gesture-hint { bottom:8px; }
 }
