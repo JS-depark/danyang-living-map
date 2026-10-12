@@ -36,9 +36,16 @@
         <label><input id="show-spheres" type="checkbox" checked> 100m 추정 인구</label>
         <label><input id="show-buildings" type="checkbox"> 건물</label>
         <label><input id="show-units" type="checkbox"> 집계구 총인구</label>
+        <label id="unit-number-control" class="sub-layer" hidden><input id="show-unit-numbers" type="checkbox" checked> 집계구 인구 숫자</label>
         <label><input id="show-site" type="checkbox" checked> 부지 경계</label>
       </fieldset>
       <p class="layer-help">건물과 집계구를 누르면 해당 자료의 상세 정보를 볼 수 있습니다.</p>
+      <button type="button" id="building-3d" class="mode-button" aria-pressed="false">건물 3D (LoD1)</button>
+      <div id="building-height-options" hidden>
+        <div class="slider-label"><label for="floor-height">층당 높이</label><output id="floor-height-value">3.0m</output></div>
+        <input id="floor-height" type="range" min="2" max="5" step="0.5" value="3" aria-label="건물 층당 높이">
+        <p class="layer-help">층수 × 층당 높이로 만든 추정 높이입니다. 실제 높이 측정값은 포함하지 않습니다.</p>
+      </div>
       <div id="buildings-status" class="layer-status" role="status" hidden></div>
       <div class="slider-label"><label for="sphere-size">구 크기</label><output id="sphere-size-value">3.0</output></div>
       <input id="sphere-size" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="구 크기">
@@ -64,10 +71,12 @@
         <div class="panel-title">집계구 총인구 <span class="unit">명</span></div>
         <div class="legend-colors" id="unit-legend-colors"></div>
         <div class="legend-values" id="unit-legend-values"></div>
+        <p id="unit-number-note">지도 안의 숫자는 집계구 총인구입니다. 단위: 명</p>
       </div>
       <div id="building-legend" class="legend-block" hidden>
-        <div class="panel-title">건물</div>
+        <div class="panel-title">건물 <span id="building-mode-legend" class="unit" hidden>3D (LoD1)</span></div>
         <div class="building-keys"><span><i class="residential-key"></i>주거용</span><span><i class="other-building-key"></i>기타·미상</span></div>
+        <p id="building-height-note" hidden></p>
       </div>
       <div class="site-key" id="site-legend"><span></span> 옛 KBS 중계소 부지</div>
     </section>
@@ -84,6 +93,8 @@
         <p>추정 인구는 실제 건물별 거주인구와 다를 수 있습니다. 공실과 관광객, 건물 안의 비주거 공간은 반영하지 않았으며, 용도가 미상이거나 비주거용인 건물은 인구 배분에서 제외했습니다.</p>
         <p id="source-detail"></p>
         <p>건물 레이어에서는 건물의 도형과 용도·층수·건물명을, 집계구 레이어에서는 구역별 총인구를 살펴볼 수 있습니다. 집계구 총인구는 통계 자료의 값이며, 100m 구역별 추정 인구와 구분해 표시했습니다.</p>
+        <p>집계구 안의 숫자는 2023년 총인구이며 단위는 명입니다. 숫자가 겹치는 구역은 확대해서 살펴볼 수 있습니다.</p>
+        <p>‘건물 3D (LoD1)’는 건물의 도형을 층수에 따른 추정 높이만큼 올린 입체 표현입니다. 층당 높이는 기본 3m이며 조절할 수 있습니다. 원본 건물 54,141개 모두 층수 값이 있지만 실제 높이 측정값은 포함하지 않으므로, 이 입체 표현은 실측 3차원 모델과 다를 수 있습니다.</p>
         <p>건물의 소속 집계구와 구역별 건물 수는 건물 도형 내부의 대표점을 기준으로 연결했습니다. 건물별 실제 거주인구 자료는 포함하지 않습니다.</p>
         <p>지형과 거주 분포의 관계가 드러나도록 단양 경계 안의 지형을 입체로 표현했습니다. 지형 높이 배율을 조절하거나 ‘위에서 보기’로 전환해 분포를 살펴보세요.</p>
         <p>옛 KBS 중계소 부지는 단양읍 도전리 산5-6에 있습니다. 지도에 표시한 부지 경계의 면적은 <span id="site-area"></span>㎡입니다.</p>

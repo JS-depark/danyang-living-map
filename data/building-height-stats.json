@@ -1,0 +1,1 @@
+{"source_count":54141,"display_count":54122,"source_valid_floor_count":54141,"display_valid_floor_count":54122,"source_missing_floor_count":0,"display_missing_floor_count":0,"missing_floor_percent":0,"floor_range":[1,20],"has_measured_height_field":false,"geometry_has_z":false,"default_floor_height_m":3,"lod1_method":"층수 × 선택한 층당 높이로 추정. 실제 높이 측정값과 지붕 형태는 포함하지 않음."}

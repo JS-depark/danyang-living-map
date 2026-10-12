@@ -23,6 +23,10 @@ main { position:relative; height:calc(100dvh - 112px); min-height:480px; overflo
 .layer-options { border:0; padding:0; margin:0; display:grid; grid-template-columns:1fr; gap:7px; font-size:11px; }
 .layer-options legend { color:#52675d; font-size:11px; padding:0 0 9px; }
 .layer-options label { display:flex; align-items:center; gap:7px; cursor:pointer; min-height:22px; }
+.layer-options .sub-layer { padding-left:17px; font-size:10px; color:#52675d; }
+.mode-button { width:100%; border:1px solid #cddcd4; border-radius:6px; padding:9px 6px; margin-top:11px; font-size:11px; color:#375548; background:#fff; }
+.mode-button[aria-pressed=true] { background:var(--accent); color:#fff; border-color:var(--accent); }
+.mode-button:disabled { opacity:.55; cursor:wait; }
 .layer-help { font-size:10px; color:#64736c; line-height:1.6; margin:8px 0 0; }
 .layer-status { font-size:10px; color:#245b7a; margin-top:7px; line-height:1.5; }
 input:disabled,select:disabled { opacity:.45; }

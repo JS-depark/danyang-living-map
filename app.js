@@ -244,10 +244,12 @@ map.on('load', () => {
   map.addSource('units', {type: 'geojson', data: units});
   referenceLayers=installReferenceLayers(map,{units,meta,showSelection});
   referenceLayers.setUnitsVisible(document.getElementById('show-units').checked);
+  referenceLayers.setUnitNumbersVisible(document.getElementById('show-unit-numbers').checked);
   map.addSource('site', {type: 'geojson', data: site});
   map.addLayer({id: 'site-fill', type: 'fill', source: 'site', paint: {'fill-color': '#3479d0', 'fill-opacity': .24}});
   map.addLayer({id: 'site-outline', type: 'line', source: 'site', paint: {'line-color': '#2154bd', 'line-width': 3}});
   map.addLayer(sphereLayer);
+  map.moveLayer('unit-population-labels');
   siteCallout = document.createElement('div');
   siteCallout.className = 'site-callout';
   siteCallout.innerHTML = '<svg aria-hidden="true"><path class="leader-halo" fill="none" stroke="#ffffff" stroke-width="6"/><path class="leader" fill="none" stroke="#214c9d" stroke-width="2.5"/><circle class="anchor-halo" r="6" fill="#fff"/><circle class="anchor" r="3.5" fill="#214c9d"/></svg>';
@@ -290,6 +292,7 @@ map.on('load', () => {
   updateSiteCallout();
   status.hidden = true;
   window.DANYANG_MAP_READY = true;
+  updateLegend();
   map.once('idle', updateTerrainPositions);
 });
 
@@ -412,21 +415,42 @@ document.getElementById('show-units').addEventListener('change', e => {
   if(!e.target.checked && selectionKind==='unit') clearSelection();
   updateLegend();
 });
-document.getElementById('show-buildings').addEventListener('change', async e => {
-  const checkbox=e.target;
+document.getElementById('show-unit-numbers').addEventListener('change',e=>{
+  referenceLayers?.setUnitNumbersVisible(e.target.checked);
+  updateLegend();
+});
+async function setBuildingsVisible(show,{lod1}={}) {
+  const checkbox=document.getElementById('show-buildings');
+  checkbox.checked=show;
   if(!referenceLayers) {checkbox.checked=false;return;}
   const message=document.getElementById('buildings-status');
-  checkbox.disabled=true;
+  const button=document.getElementById('building-3d');
+  checkbox.disabled=true;button.disabled=true;
   if(checkbox.checked && !referenceLayers.state().buildingsReady) {message.hidden=false;message.textContent='건물 자료를 불러오는 중…';}
   try {
     await referenceLayers.setBuildingsVisible(checkbox.checked);
+    if(typeof lod1==='boolean') await referenceLayers.setBuildings3D(lod1);
     message.hidden=true;
   } catch(error) {
     checkbox.checked=false;
     await referenceLayers.setBuildingsVisible(false);
     message.hidden=false;message.textContent='건물 자료를 불러오지 못했습니다. 잠시 후 다시 켜주세요.';
-  } finally {checkbox.disabled=false;updateLegend();}
+  } finally {checkbox.disabled=false;button.disabled=false;updateLegend();}
   if(!checkbox.checked && selectionKind==='building') clearSelection();
+}
+document.getElementById('show-buildings').addEventListener('change',e=>setBuildingsVisible(e.target.checked));
+document.getElementById('building-3d').addEventListener('click',async()=>{
+  const enable=!referenceLayers?.state().buildings3D;
+  await setBuildingsVisible(true,{lod1:enable});
+  if(referenceLayers?.state().buildings3D && map.getPitch()<35) {
+    if(activeView==='county') fitCounty({pitch:50,bearing:map.getBearing(),duration:700});
+    else map.easeTo({pitch:50,duration:700});
+  }
+});
+document.getElementById('floor-height').addEventListener('input',e=>{
+  document.getElementById('floor-height-value').textContent=`${Number(e.target.value).toFixed(1)}m`;
+  referenceLayers?.setFloorHeight(e.target.value);
+  updateLegend();
 });
 document.getElementById('show-site').addEventListener('change', e => {
   for (const id of ['site-fill', 'site-outline']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', e.target.checked ? 'visible' : 'none');
@@ -436,6 +460,8 @@ document.getElementById('show-site').addEventListener('change', e => {
 });
 
 function updateLegend() {
+  const buildingState=referenceLayers?.state();
+  const lod1=buildingState?.buildingsVisible && buildingState?.buildings3D;
   document.getElementById('sphere-legend').hidden=!visible;
   document.getElementById('unit-legend').hidden=!document.getElementById('show-units').checked;
   document.getElementById('building-legend').hidden=!document.getElementById('show-buildings').checked;
@@ -443,7 +469,22 @@ function updateLegend() {
   document.querySelector('.legend').hidden=!['show-spheres','show-buildings','show-units','show-site'].some(id=>document.getElementById(id).checked);
   document.getElementById('sphere-size').disabled=!visible;
   document.getElementById('color-palette').disabled=!visible;
+  document.getElementById('unit-number-control').hidden=!document.getElementById('show-units').checked;
+  document.getElementById('unit-number-note').hidden=!document.getElementById('show-unit-numbers').checked;
+  document.getElementById('building-3d').setAttribute('aria-pressed',String(Boolean(lod1)));
+  document.getElementById('building-height-options').hidden=!lod1;
+  document.getElementById('building-mode-legend').hidden=!lod1;
+  document.getElementById('building-height-note').hidden=!lod1;
+  if(lod1) document.getElementById('building-height-note').textContent=`추정 높이 = 층수 × 층당 ${buildingState.floorHeight.toFixed(1)}m`;
+  if(window.DANYANG_MAP_READY) {
+    const mapBox=map.getContainer().getBoundingClientRect();
+    const controlsTop=controls.getBoundingClientRect().top-mapBox.top;
+    const legend=document.querySelector('.legend');
+    const legendTop=legend.hidden?mapBox.height-30:legend.getBoundingClientRect().top-mapBox.top;
+    controls.style.maxHeight=`${Math.max(130,legendTop-controlsTop-14)}px`;
+  }
 }
+window.addEventListener('resize',()=>{if(window.DANYANG_MAP_READY) updateLegend();});
 
 function viewPadding() {
   const canvas=map.getCanvas();
@@ -547,6 +588,7 @@ function selectSphere(e) {
 }
 map.on('click', e => {
   clearSelection();
+  if(referenceLayers?.selectAt(e.point,'unit-label')) return;
   if(referenceLayers?.selectAt(e.point,'building')) return;
   const hits = map.getLayer('site-fill') ? map.queryRenderedFeatures(e.point, {layers: ['site-fill']}) : [];
   if (hits.length) {
@@ -573,8 +615,13 @@ document.getElementById('close-selection').addEventListener('click',clearSelecti
 function exportLegends() {
   const sections=[];
   if(visible) sections.push({kind:'range',title:'100m 구역별 추정 인구 (명)',colors,labels,note:'구 하나 = 주거 건물이 있는 100m 구역 · 건물별 실제 인구가 아닌 추정치'});
-  if(document.getElementById('show-units').checked) sections.push({kind:'range',title:'집계구 총인구 (명) · 2023년',colors:unitColors,labels:unitLabels});
-  if(document.getElementById('show-buildings').checked) sections.push({kind:'keys',title:'건물',colors:buildingColors,labels:['주거용','기타·미상']});
+  if(document.getElementById('show-units').checked) sections.push({kind:'range',title:'집계구 총인구 (명) · 2023년',colors:unitColors,labels:unitLabels,
+    note:document.getElementById('show-unit-numbers').checked?'지도 안의 숫자 = 집계구 총인구 (명)':''});
+  if(document.getElementById('show-buildings').checked) {
+    const state=referenceLayers?.state();
+    sections.push({kind:'keys',title:state?.buildings3D?'건물 · 3D (LoD1)':'건물',colors:buildingColors,labels:['주거용','기타·미상'],
+      note:state?.buildings3D?`입체 높이 = 층수 × 층당 ${state.floorHeight.toFixed(1)}m · 실제 높이 측정값이 아닌 추정치`:''});
+  }
   return sections;
 }
 
@@ -596,7 +643,7 @@ document.getElementById('export-image').addEventListener('click', async () => {
   ctx.fillStyle = '#243630'; ctx.font = '600 25px "Malgun Gothic",sans-serif';
   ctx.fillText('단양, 사람이 모여 사는 곳', 30, 40);
   ctx.font = '14px "Malgun Gothic",sans-serif'; ctx.fillStyle = '#60746b';
-  const layerNames=[visible?'100m 추정 인구':'',document.getElementById('show-buildings').checked?'건물':'',document.getElementById('show-units').checked?'집계구 총인구':''].filter(Boolean);
+  const layerNames=[visible?'100m 추정 인구':'',document.getElementById('show-buildings').checked?(referenceLayers?.state().buildings3D?'건물 3D (LoD1)':'건물'):'',document.getElementById('show-units').checked?'집계구 총인구':''].filter(Boolean);
   ctx.fillText(`${layerNames.join(' · ') || '단양 지형'} · 지형 높이 ${exaggeration.toFixed(1)}배`, 30, 66);
   ctx.drawImage(source, 0, 85, canvas.width, viewHeight);
   if (document.getElementById('show-site').checked && calloutLayout && siteCallout.style.display !== 'none') {
